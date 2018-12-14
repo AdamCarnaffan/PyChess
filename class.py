@@ -1,6 +1,4 @@
-class my_class(object):
+class Piece:
     pass
-
-
 
 

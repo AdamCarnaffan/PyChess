@@ -1,8 +1,8 @@
-import enum as e
+from pieces import *
 
 def main():
-    print("This is the project!")
-    print("ok test")
+    # Enum test
+    print(Pieces.Rook.value)
     return True
 
 
