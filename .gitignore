@@ -1,0 +1,22 @@
+# Don't track content of these folders
+__pycache__
+
+# Visual Studios #
+###################
+**/*.HTMLClient/GeneratedArtifacts
+**/*.DesktopClient/GeneratedArtifacts
+**/*.DesktopClient/ModelManifest.xml
+**/*.Server/GeneratedArtifacts
+**/*.Server/ModelManifest.xml
+_Pvt_Extensions
+*.[Cc]ache
+!*.[Cc]ache/
+*.nuget.props
+*.nuget.targets
+!**/packages/build/
+**/packages/*
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
