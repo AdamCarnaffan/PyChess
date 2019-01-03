@@ -67,6 +67,12 @@ def validate_position(pos):
 def rook(pos, oldPos, arg):
     if not validate_position(pos): # Validate the position input for the move
         return False
+    diffx = abs(oldPos[0] - pos[0])
+    diffy = abs(oldPos[1] - pos[1])
+    if diffx == 0 and diffy != 0:
+        return True
+    elif diffy == 0 and diffx != 0:
+        return True
     return False
 
 def pawn(pos, oldPos, arg):
@@ -89,6 +95,10 @@ def pawn(pos, oldPos, arg):
 def bishop(pos, oldPos, arg):
     if not validate_position(pos): # Validate the position input for the move
         return False
+    diffx = abs(oldPos[0] - pos[0])
+    diffy = abs(oldPos[1] - pos[1])
+    if diffx == diffy:
+        return True
     return False
 
 def knight(pos, oldPos, arg):
@@ -105,18 +115,33 @@ def knight(pos, oldPos, arg):
 def queen(pos, oldPos, arg):
     if not validate_position(pos): # Validate the position input for the move
         return False
+    diffx = abs(oldPos[0] - pos[0])
+    diffy = abs(oldPos[1] - pos[1])
+    if diffx == diffy:
+        return True
+    elif diffx == 0 and diffy != 0:
+        return True
+    elif diffy == 0 and diffx != 0:
+        return True
     return False
 
 def king(pos, oldPos, arg):
     if not validate_position(pos): # Validate the position input for the move
         return False
-    return False
+    diffx = abs(oldPos[0] - pos[0])
+    diffy = abs(oldPos[1] - pos[1])
+    if diffx > 1 or diffy > 1:
+        if castle(pos, oldPos, arg):
+            return True
+        return False
+    # Needs to not put self into check
+    return True
 
 # Special Movements #
 #####################
 
 def castle(pos, oldPos, arg):
-    pass
+    return False
 
 def take(pos, oldPos, arg):
     diffx = abs(oldPos[0] - pos[0])

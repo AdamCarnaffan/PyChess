@@ -64,6 +64,9 @@ class Game:
         self.playerInCheck = False
         root.mainloop()
 
+    def make_backup(self):
+        pass # For undo
+
     def get_path_points(self, final, initial):
         if final[0] == initial[0] and final[1] == initial[1]:
             return []
@@ -88,7 +91,13 @@ class Game:
         pass
 
     def take_piece(self, pos):
-        pass
+        i = 0
+        for p in self.pieces:
+            if p.x == pos[0] and p.y == pos[1]:
+                self.pieces = self.pieces[0:i] + self.pieces[i+1:len(self.pieces)]
+                return True
+            i = i + 1
+        return False
 
     def change_turn(self):
         self.playing = 1 if self.playing == 2 else 2
