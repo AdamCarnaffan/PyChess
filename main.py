@@ -1,18 +1,18 @@
 from pieces import *
 from chess_class import *
 from bin import Argument, Space
-from tkinter import Tk, Button, Canvas, Frame
+from tkinter import Tk, Canvas, PhotoImage
 
 class UI:
     def __init__(self, master, gameController):
         self.master = master
         self.master.title("Chess")
-        self.master.geometry('{}x{}'.format(600,600))
+        self.master.geometry('{}x{}'.format(560,560))
 
-        self.canv = Canvas(master, width=600, height=600)
+        self.canv = Canvas(master, width=560, height=560)
         self.canv.focus_set()
         self.canv.tag_bind("possibility", "<Button-1>", gameController.make_move)
-        self.canv.tag_bind("piece", "<Button-1>", gameController.generate_possibilities)
+        self.canv.tag_bind("piece", "<Button-1>", gameController.show_moves)
         self.canv.pack()
         self.draw_board()
         self.draw_pieces(gameController.pieces)
@@ -20,7 +20,7 @@ class UI:
     def draw_board(self):
         for r in range(0,8,1):
             for c in range(r % 2,8,2):
-                self.canv.create_rectangle(r*75, c*75, r*75 + 75, c*75 + 75, fill="purple")
+                self.canv.create_rectangle(r*70, c*70, r*70 + 70, c*70 + 70, fill="grey")
         return True
 
     def draw_possibilities(self, poss):
@@ -29,9 +29,9 @@ class UI:
             px = p[0] - 1
             py = p[1] - 1
             if len(p) > 2:
-                self.canv.create_rectangle(px*75 + 5, py*75 + 5, px*75 + 70, py*75 + 70, fill="red", tags="possibility")
+                self.canv.create_rectangle(px*70, py*70, px*70 + 70, py*70 + 70, fill="red", stipple='gray50', tags="possibility")
             else:
-                self.canv.create_rectangle(px*75 + 5, py*75 + 5, px*75 + 70, py*75 + 70, fill="orange", tags="possibility")
+                self.canv.create_rectangle(px*70, py*70, px*70 + 70, py*70 + 70, fill="orange", stipple='gray50', tags="possibility")
         return True
 
     def get_coords(self, id):
@@ -46,11 +46,9 @@ class UI:
     def draw_pieces(self, pieces):
         self.clear_draws()
         for p in pieces:
-            color = "green" if p.player == 1 else "blue"
             xPos = p.x - 1
             yPos = p.y - 1
-            p.set_id(self.canv.create_rectangle(xPos*75 + 5, yPos*75 + 5, xPos*75 + 70, yPos*75 + 70, fill=color, tags="piece"))
-            self.canv.create_text(xPos*75 + 42, yPos*75 + 42, fill="black", text=str(p.type), tags="piece-text")
+            p.set_id(self.canv.create_image(xPos*70 + 35, yPos*70 + 35, image=p.sprite, tags="piece"))
         return True
 
 class Game:
@@ -84,11 +82,30 @@ class Game:
             if abs(final[0] - initial[0]) != abs(final[1] - initial[1]):
                 return []
             for v in range(1, int(abs(final[0] - initial[0])), 1):
-                path = path + [[direction[0]*v, direction[1]*v]]
+                path = path + [[initial[0] + direction[0]*v, initial[1] + direction[1]*v]]
         return path
 
     def check_player_in_check(self):
-        pass
+        self.playerInCheck = False
+        for p in self.pieces:
+            if p.player == self.playing and p.type == Pieces.King:
+                targ = p
+                print(targ.player)
+                break
+        for p in self.pieces:
+            if p.player != self.playing:
+                self.selected = p
+                poss = self.generate_possibilities(p)
+                print(p.type)
+                print(p.player)
+                for v in poss:
+                    if p.type == Pieces.Queen:
+                        print(v)
+                    if v[0] == targ.x and v[1] == targ.y:
+                        print("ASD")
+                        self.playerInCheck = True
+                        return True
+        return False
 
     def take_piece(self, pos):
         i = 0
@@ -106,8 +123,8 @@ class Game:
 
     def make_move(self, event):
         pos = self.display.get_coords(event.widget.find_closest(event.x, event.y)[0])
-        moveX = (pos[0] - 5)/75 + 1
-        moveY = (pos[1] - 5)/75 + 1
+        moveX = (pos[0])/70 + 1
+        moveY = (pos[1])/70 + 1
         piece = self.selected
         space = self.check_pos_available([moveX, moveY])
         if space == Space.Taken:
@@ -146,22 +163,32 @@ class Game:
                     return True
         return False
 
-    def generate_possibilities(self, event):
-        targ = self.get_piece_by_id(event.widget.find_closest(event.x, event.y)[0])
-        if targ.player != self.playing:
-            return False
-        self.selected = targ
+    def generate_possibilities(self, piece):
         possibilities = []
         for x in range(1,9,1):
             for y in range(1,9,1):
                 space = self.check_pos_available([x,y])
                 if space == Space.Taken:
                     continue
-                if targ.move([x,y], [targ.x, targ.y], targ.get_args(space)) and not self.check_collision([x,y], targ):
+                if piece.move([x,y], [piece.x, piece.y], piece.get_args(space)) and not self.check_collision([x,y], piece):
                     poss = [x,y]
                     if space == Space.Enemy:
                         poss = poss + [1]
                     possibilities = possibilities + [poss]
+        return possibilities
+        
+
+    def show_moves(self, event):
+        targ = self.get_piece_by_id(event.widget.find_closest(event.x, event.y)[0])
+        if targ is False:
+            return False
+        if targ.player != self.playing:
+            return False
+        self.selected = targ
+        possibilities = self.generate_possibilities(targ)
+        if targ.type == Pieces.Queen:
+            print("QUEEN")
+            print(possibilities)
         self.display.draw_possibilities(possibilities)
         return True
 
@@ -186,11 +213,11 @@ class Game:
 
     def generate_starting_board(self):
         for player in range(1,3,1):
-            pawnRow = 2 if player == 1 else 7
-            mainRow = 1 if player == 1 else 8
+            pawnRow = 2 if player == 2 else 7
+            mainRow = 1 if player == 2 else 8
             # Add Pawns
             for c in range(1,9,1):
-                self.add_piece(Piece(Pieces.Pawn, [c, pawnRow], player, 1 if player == 2 else -1))
+                self.add_piece(Piece(Pieces.Pawn, [c, pawnRow], player, 1 if player == 1 else -1))
             # Add Rooks
             self.add_piece(Piece(Pieces.Rook, [1, mainRow], player)) 
             self.add_piece(Piece(Pieces.Rook, [8, mainRow], player))

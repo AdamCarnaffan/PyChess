@@ -1,5 +1,6 @@
 from pieces import *
 from bin import Argument, Space
+from tkinter import PhotoImage
 
 class Piece:
     def __init__(self, type, position, owner, dir = None):
@@ -13,6 +14,13 @@ class Piece:
             self.direction = dir
         self.get_move_function()
         self.id = -1
+        self.craft_sprite()
+
+    def craft_sprite(self):
+        playerStr = "wht-" if self.player == 1 else "blk-"
+        pieceStr = get_piece_sprite(self.type)
+        self.sprite = PhotoImage(file='sprites/{}'.format(playerStr + pieceStr))
+        return True
 
     def get_move_function(self):
         self.move = get_movement(self.type)

@@ -151,7 +151,7 @@ def take(pos, oldPos, arg):
             return True
     return False
 
-# Move Tuple #
+# Piece Tuples #
 ###############
 
 moves = {
@@ -163,8 +163,20 @@ moves = {
     Pieces.King : king
 }
 
+sprites = {
+    Pieces.Pawn : "pawn.png",
+    Pieces.Rook : "rook.png",
+    Pieces.Knight : "knight.png",
+    Pieces.Bishop : "bishop.png",
+    Pieces.Queen : "queen.png",
+    Pieces.King : "king.png",
+}
+
 # Support Functions #
 #####################
 
 def get_movement(type):
     return moves[type]
+
+def get_piece_sprite(type):
+    return sprites[type]
