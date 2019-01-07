@@ -8,11 +8,11 @@ class UI:
         self.master = master
         self.master.title("Chess")
         self.master.geometry('{}x{}'.format(560,560))
-
         self.canv = Canvas(master, width=560, height=560)
         self.canv.focus_set()
-        self.canv.tag_bind("possibility", "<Button-1>", gameController.make_move)
+        self.canv.tag_bind("possibility", "<Button-1>", gameController.commit_move)
         self.canv.tag_bind("piece", "<Button-1>", gameController.show_moves)
+        self.canv.bind("z", gameController.undo_move)
         self.canv.pack()
         self.draw_board()
         self.draw_pieces(gameController.pieces)
@@ -37,6 +37,10 @@ class UI:
     def get_coords(self, id):
         return self.canv.coords(id)
 
+    def end_game(self):
+        self.canv.create_rectangle(0, 0, 560, 560, fill="red")
+        return True
+
     def clear_draws(self):
         self.canv.delete("piece")
         self.canv.delete("piece-text")
@@ -53,17 +57,58 @@ class UI:
 
 class Game:
     def __init__(self):
-        root = Tk()
         self.pieces = []
-        self.generate_starting_board()
-        self.display = UI(root, self)
         self.selected = None
         self.playing = 1
         self.playerInCheck = False
+        self.backups = []
+        self.nextID = 1
+
+    def play(self):
+        root = Tk()
+        # Build game sprites
+        for p in self.pieces:
+            p.craft_sprite()
+        self.display = UI(root, self)
         root.mainloop()
+        return True
 
     def make_backup(self):
-        pass # For undo
+        backup = Game()
+        for p in self.pieces:
+            backup.pieces = backup.pieces + [p.duplicate()]
+        backup.display = self.display
+        backup.playing = self.playing
+        backup.playerInCheck = self.playerInCheck
+        backup.selected = self.selected
+        backup.nextID = self.nextID
+        backup.backups = list(self.backups)
+        self.backups = self.backups + [backup]
+        return True
+
+    def assign_id(self):
+        self.nextID = self.nextID + 1
+        return self.nextID - 1
+
+    def restore_from_backup(self):
+        if len(self.backups) < 1:
+            return False
+        backup = self.backups[len(self.backups) - 1]
+        self.pieces = []
+        for p in backup.pieces:
+            self.pieces = self.pieces + [p]
+        self.display = backup.display
+        self.playing = backup.playing
+        self.selected = backup.selected
+        self.nextID = backup.nextID
+        self.playerInCheck = backup.playerInCheck
+        self.backups = list(backup.backups)
+        return True
+
+    def undo_move(self, event = None):
+        self.restore_from_backup()
+        self.display.draw_pieces(self.pieces)
+        return True
 
     def get_path_points(self, final, initial):
         if final[0] == initial[0] and final[1] == initial[1]:
@@ -85,27 +130,29 @@ class Game:
                 path = path + [[initial[0] + direction[0]*v, initial[1] + direction[1]*v]]
         return path
 
-    def check_player_in_check(self):
+    def check_player_in_check(self, player):
         self.playerInCheck = False
+        targ = None
         for p in self.pieces:
-            if p.player == self.playing and p.type == Pieces.King:
+            if p.player == player and p.type == Pieces.King:
                 targ = p
-                print(targ.player)
                 break
+        if targ is None:
+            return False
         for p in self.pieces:
-            if p.player != self.playing:
-                self.selected = p
+            if p.player != player:
                 poss = self.generate_possibilities(p)
-                print(p.type)
-                print(p.player)
                 for v in poss:
-                    if p.type == Pieces.Queen:
-                        print(v)
                     if v[0] == targ.x and v[1] == targ.y:
-                        print("ASD")
                         self.playerInCheck = True
                         return True
         return False
+
+    def check_checkmate(self, player):
+        for p in self.pieces:
+            if p.player == player and len(self.generate_possibilities(p, True)) > 0:
+                return False
+        return True
 
     def take_piece(self, pos):
         i = 0
@@ -117,37 +164,82 @@ class Game:
         return False
 
     def change_turn(self):
-        self.playing = 1 if self.playing == 2 else 2
-        self.check_player_in_check()
+        self.change_player()
+        self.check_player_in_check(self.playing)
+        if self.playerInCheck:
+            if self.check_checkmate(self.playing):
+                self.display.end_game()
+                print("GAME OVER")
+                return False
+        # AI would make turn here
+        # Then turn returns to original player
         return True
 
-    def make_move(self, event):
+    def change_player(self):
+        self.playing = 1 if self.playing == 2 else 2
+        return True
+
+    def commit_move(self, event):
         pos = self.display.get_coords(event.widget.find_closest(event.x, event.y)[0])
-        moveX = (pos[0])/70 + 1
-        moveY = (pos[1])/70 + 1
-        piece = self.selected
-        space = self.check_pos_available([moveX, moveY])
+        moveX = int((pos[0])/70 + 1)
+        moveY = int((pos[1])/70 + 1)
+        piece = self.get_piece_by_uid(self.selected)
+        result = self.make_move([moveX, moveY], piece)
+        self.display.draw_pieces(self.pieces)
+        return result
+
+    def simulate_safe_move(self, pos, piece):
+        playing = self.playing
+        original = piece.duplicate()
+        self.make_move(pos, self.get_piece_by_uid(piece.uid), False) # Backup is made
+        safe = True
+        if self.check_player_in_check(self.playing):
+            safe = False
+        self.undo_move()
+        piece.restore(original)
+        return safe
+
+    def make_move(self, pos, piece, real = True):
+        space = self.check_pos_available(pos, piece.player)
         if space == Space.Taken:
             return False
-        pieceArgs = piece.get_args(space)
-        if self.selected.move([moveX, moveY], [piece.x, piece.y], pieceArgs) and not self.check_collision([moveX, moveY], piece):
+        if piece.type == Pieces.King:
+            castle = self.check_castle(self.playing)
+        else:
+            castle = []
+        pieceArgs = piece.get_args(space, castle)
+        if piece.move(pos, [piece.x, piece.y], pieceArgs) and not self.check_collision(pos, piece):
+            self.make_backup()
             # Check Status of space
             if space == Space.Enemy:
-                self.take_piece([moveX, moveY])
+                self.take_piece(pos)
+            # Calculate rook movement on castle
+            if piece.type == Pieces.King:
+                diff = piece.x - pos[0]
+                if abs(diff) == 2:
+                    if diff < 0:
+                        rookPos = [8, piece.y]
+                        rookFinal = [6, piece.y]
+                    else:
+                        rookPos = [1, piece.y]
+                        rookFinal = [4, piece.y]
+                    rook = self.get_piece_by_pos(rookPos)
+                    if rook == False or rook.type != Pieces.Rook:
+                        return False
+                    rook.complete_move(rookFinal)
             # Begin moving piece
-            piece.x = moveX
-            piece.y = moveY
-            piece.hasMoved = True
-            self.change_turn()
-            self.display.draw_pieces(self.pieces)
+            piece.complete_move(pos)
+            
+            if real:
+                self.change_turn()
             return True
         else:
             return False
 
-    def check_pos_available(self, pos):
+    def check_pos_available(self, pos, player):
         for p in self.pieces:
             if p.x == pos[0] and p.y == pos[1]:
-                if p.player == self.playing:
+                if p.player == player:
                     return Space.Taken
                 else:
                     return Space.Enemy
@@ -163,17 +255,55 @@ class Game:
                     return True
         return False
 
-    def generate_possibilities(self, piece):
+    def check_castle(self, player):
+        possible = []
+        for p in self.pieces:
+            if p.player == player:
+                if p.type == Pieces.King:
+                    if p.hasMoved:
+                        return []
+                    else:
+                        king = p
+                if p.type == Pieces.Rook:
+                    if not p.hasMoved:
+                        possible = possible + [p]
+        result = []
+        other = 2 if player == 1 else 1
+        for p in possible:
+            # Check empty path
+            if self.check_collision([king.x, king.y], p):
+                continue
+            # Check challenge on squares
+            points = self.get_path_points([king.x, king.y], [p.x, p.y])
+            for v in self.pieces:
+                if v.player == other:
+                    poi = self.generate_possibilities(v)
+                    for i in points:
+                        for l in poi:
+                            if l == i:
+                                continue
+            result = result + [[p.x, p.y]]
+        return result
+
+    def generate_possibilities(self, piece, safe = False):
         possibilities = []
         for x in range(1,9,1):
             for y in range(1,9,1):
-                space = self.check_pos_available([x,y])
+                space = self.check_pos_available([x,y], piece.player)
                 if space == Space.Taken:
                     continue
-                if piece.move([x,y], [piece.x, piece.y], piece.get_args(space)) and not self.check_collision([x,y], piece):
+                if safe and piece.type == Pieces.King:
+                    castle = self.check_castle(self.playing)
+                else:
+                    castle = []
+                if piece.move([x,y], [piece.x, piece.y], piece.get_args(space, castle)) and not self.check_collision([x,y], piece):
                     poss = [x,y]
+                    #print(poss)
                     if space == Space.Enemy:
                         poss = poss + [1]
+                    if safe: # Check that move saves from check
+                        if not self.simulate_safe_move(poss, piece):
+                            continue
                     possibilities = possibilities + [poss]
         return possibilities
         
@@ -184,17 +314,26 @@ class Game:
             return False
         if targ.player != self.playing:
             return False
-        self.selected = targ
-        possibilities = self.generate_possibilities(targ)
-        if targ.type == Pieces.Queen:
-            print("QUEEN")
-            print(possibilities)
+        self.selected = targ.uid
+        possibilities = self.generate_possibilities(targ, True)
         self.display.draw_possibilities(possibilities)
         return True
 
     def get_piece_by_id(self, id):
         for p in self.pieces:
             if p.id == id:
+                return p
+        return False
+
+    def get_piece_by_uid(self, id):
+        for p in self.pieces:
+            if p.uid == id:
+                return p
+        return False
+
+    def get_piece_by_pos(self, pos):
+        for p in self.pieces:
+            if p.x == pos[0] and p.y == pos[1]:
                 return p
         return False
 
@@ -217,24 +356,26 @@ class Game:
             mainRow = 1 if player == 2 else 8
             # Add Pawns
             for c in range(1,9,1):
-                self.add_piece(Piece(Pieces.Pawn, [c, pawnRow], player, 1 if player == 1 else -1))
+                self.add_piece(Piece(Pieces.Pawn, [c, pawnRow], player, self.assign_id(), 1 if player == 1 else -1))
             # Add Rooks
-            self.add_piece(Piece(Pieces.Rook, [1, mainRow], player)) 
-            self.add_piece(Piece(Pieces.Rook, [8, mainRow], player))
+            self.add_piece(Piece(Pieces.Rook, [1, mainRow], player, self.assign_id())) 
+            self.add_piece(Piece(Pieces.Rook, [8, mainRow], player, self.assign_id()))
             # Add Knights
-            self.add_piece(Piece(Pieces.Knight, [2, mainRow], player)) 
-            self.add_piece(Piece(Pieces.Knight, [7, mainRow], player))
+            self.add_piece(Piece(Pieces.Knight, [2, mainRow], player, self.assign_id())) 
+            self.add_piece(Piece(Pieces.Knight, [7, mainRow], player, self.assign_id()))
             # Add Bishops
-            self.add_piece(Piece(Pieces.Bishop, [3, mainRow], player))  
-            self.add_piece(Piece(Pieces.Bishop, [6, mainRow], player))
+            self.add_piece(Piece(Pieces.Bishop, [3, mainRow], player, self.assign_id()))  
+            self.add_piece(Piece(Pieces.Bishop, [6, mainRow], player, self.assign_id()))
             # Add Queen
-            self.add_piece(Piece(Pieces.Queen, [5, mainRow], player))
+            self.add_piece(Piece(Pieces.Queen, [4, mainRow], player, self.assign_id()))
             # Add King
-            self.add_piece(Piece(Pieces.King, [4, mainRow], player))
+            self.add_piece(Piece(Pieces.King, [5, mainRow], player, self.assign_id()))
         return True
 
 def main():
     game = Game()
+    game.generate_starting_board()
+    game.play()
     return True
 
 main()

@@ -141,6 +141,13 @@ def king(pos, oldPos, arg):
 #####################
 
 def castle(pos, oldPos, arg):
+    if len(arg.castles) <= 0:
+        return False
+    for p in arg.castles:
+        # Direction based on rook x
+        diffx = 2 if p[0] > oldPos[0] else -2
+        if pos[0] == oldPos[0] + diffx and pos[1] == oldPos[1]:
+            return True
     return False
 
 def take(pos, oldPos, arg):
